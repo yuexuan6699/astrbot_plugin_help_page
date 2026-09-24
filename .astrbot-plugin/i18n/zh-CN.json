@@ -1,0 +1,11 @@
+{
+  "metadata": {
+    "display_name": "更好的帮助"
+  },
+  "pages": {
+    "help": {
+      "title": "更好的帮助",
+      "description": "可视化排版帮助内容：勾选条目、AI 翻译润色、拖拽调位置并实时预览"
+    }
+  }
+}

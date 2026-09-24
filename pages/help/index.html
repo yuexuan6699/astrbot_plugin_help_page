@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>更好的帮助</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <h1 id="heading">更好的帮助</h1>
+          <p class="subtitle" id="summary">加载中…</p>
+        </div>
+        <div class="topbar-actions">
+          <span class="status" id="status"></span>
+          <input id="search" type="search" placeholder="搜索指令 / 插件 / 说明" />
+          <button id="btn-save" class="btn primary" type="button">保存</button>
+          <button id="btn-reset" class="btn danger" type="button">恢复默认</button>
+        </div>
+      </header>
+
+      <div class="workspace" id="workspace">
+        <aside class="pane pane-left">
+          <div class="pane-tabs">
+            <button class="tab is-active" id="tab-btn-content" type="button">
+              内容调整
+            </button>
+            <button class="tab" id="tab-btn-canvas" type="button">
+              画布调整
+            </button>
+            <span class="tabs-divider" aria-hidden="true"></span>
+            <span class="pane-title" id="list-title">功能清单</span>
+            <span class="pane-hint" id="list-stats"></span>
+            <button
+              id="btn-swap"
+              class="btn tiny ghost"
+              type="button"
+              title="把预览与编辑栏左右互换"
+            >
+              ⇄ 左右互换
+            </button>
+          </div>
+
+          <div class="tab-panel" id="tab-content">
+            <div class="toolbar">
+              <button id="btn-select-visible" class="btn tiny" type="button">
+                全选可见
+              </button>
+              <button id="btn-clear-select" class="btn tiny" type="button">
+                清空选择
+              </button>
+              <span class="sel-count" id="sel-count">已选 0</span>
+              <button id="btn-ai-translate" class="btn tiny accent" type="button">
+                AI 翻译为中文
+              </button>
+              <button id="btn-ai-polish" class="btn tiny accent" type="button">
+                AI 润色
+              </button>
+            </div>
+
+            <div class="toolbar">
+              <button id="btn-mine" class="btn tiny" type="button">
+                AI 挖掘未注册功能
+              </button>
+              <button id="btn-new" class="btn tiny" type="button">
+                ＋ 新增条目
+              </button>
+              <button id="btn-trash" class="btn tiny" type="button">
+                不展示的条目 (0)
+              </button>
+            </div>
+
+            <div class="list" id="list"></div>
+          </div>
+
+          <div class="tab-panel is-hidden" id="tab-canvas">
+            <div class="canvas-head" id="canvas-head"></div>
+            <div class="panel" id="panel"></div>
+          </div>
+        </aside>
+
+        <section class="pane pane-right">
+          <div class="preview">
+            <div class="preview-head">
+              <span class="pane-title">实时预览</span>
+              <span class="pane-hint" id="preview-meta">尚未生成</span>
+              <label class="inline">
+                <input type="checkbox" id="auto-preview" checked />
+                自动刷新
+              </label>
+              <button id="btn-preview" class="btn tiny" type="button">
+                刷新预览
+              </button>
+            </div>
+            <div class="preview-body" id="preview-body">
+              <img id="preview-img" alt="帮助图预览" hidden />
+              <div class="preview-empty" id="preview-empty">
+                点击「刷新预览」生成帮助图
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="modal is-hidden" id="modal">
+      <div class="modal-box" id="modal-box">
+        <header class="modal-head">
+          <h2 id="modal-title">编辑</h2>
+          <button id="modal-close" class="btn ghost" type="button">×</button>
+        </header>
+        <div class="modal-body" id="modal-body"></div>
+        <footer class="modal-foot">
+          <span class="modal-note" id="modal-note"></span>
+          <button id="modal-cancel" class="btn" type="button">取消</button>
+          <button id="modal-ok" class="btn primary" type="button">确定</button>
+        </footer>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
