@@ -168,10 +168,18 @@ def _build_plan(
 
     title_height = line_height(fonts["title"])
     subtitle_height = line_height(fonts["subtitle"]) if theme.subtitle else 0
-    header_body = title_height + (
-        theme.line_gap + subtitle_height if subtitle_height else 0
+    version_text = theme.version_text.strip()
+    version_height = (
+        line_height(fonts["version"]) if theme.show_version and version_text else 0
     )
-    plan.append(("header", 0, header_body, title_height, subtitle_height))
+    header_body = title_height
+    if subtitle_height:
+        header_body += theme.line_gap + subtitle_height
+    if version_height:
+        header_body += theme.line_gap + version_height
+    plan.append(
+        ("header", 0, header_body, title_height, subtitle_height, version_height)
+    )
     total += header_body
 
     for group, entries in _build_blocks(groups, theme):
@@ -210,6 +218,7 @@ def _load_fonts(theme: Theme) -> dict[str, Any]:
     return {
         "title": load_font(theme.title_size, theme.font_path),
         "subtitle": load_font(theme.subtitle_size, theme.font_path),
+        "version": load_font(theme.version_size, theme.font_path),
         "group": load_font(theme.group_size, theme.font_path),
         "group_desc": load_font(theme.group_desc_size, theme.font_path),
         "cmd": load_font(theme.cmd_size, theme.font_path),
@@ -242,13 +251,14 @@ def compose(groups: list[Group], theme: Theme) -> Image.Image:
 
     padding = theme.padding
     content_width = max(160, theme.width - padding * 2)
+    version_text = theme.version_text.strip()
     y = float(padding)
 
     for item in plan:
         kind = item[0]
 
         if kind == "header":
-            _, lead, body, title_height, subtitle_height = item
+            _, lead, body, title_height, subtitle_height, version_height = item
             y += lead
             draw_segments(
                 canvas,
@@ -269,6 +279,24 @@ def compose(groups: list[Group], theme: Theme) -> Image.Image:
                             theme.subtitle,
                             parse_color(theme.subtitle_color),
                             fonts["subtitle"],
+                        )
+                    ],
+                    content_width,
+                )
+            if version_height:
+                version_y = y + title_height + theme.line_gap
+                if subtitle_height:
+                    version_y += subtitle_height + theme.line_gap
+                draw_segments(
+                    canvas,
+                    padding,
+                    version_y,
+                    ascent(fonts["version"]),
+                    [
+                        (
+                            version_text,
+                            parse_color(theme.version_color),
+                            fonts["version"],
                         )
                     ],
                     content_width,

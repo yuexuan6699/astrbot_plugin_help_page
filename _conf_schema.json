@@ -14,6 +14,24 @@
         "default": true,
         "hint": "开启后普通用户看不到管理员专用指令，管理员始终可见全部"
     },
+    "block_builtin_help": {
+        "description": "屏蔽 AstrBot 自带 /help",
+        "type": "bool",
+        "default": true,
+        "hint": "开启后 /help 完全由本插件接管，内置 help 指令会被直接禁用；禁用/卸载本插件时自动恢复"
+    },
+    "show_builtin_commands": {
+        "description": "把 AstrBot 内置指令纳入帮助",
+        "type": "bool",
+        "default": true,
+        "hint": "开启后内置指令以「AstrBot 内置」分组出现在帮助图里，即使 ignored_plugins 里写着 builtin_commands 也会覆盖它；内置 /help 本身始终不列出"
+    },
+    "show_version": {
+        "description": "显示版本行",
+        "type": "bool",
+        "default": true,
+        "hint": "在标题下方显示 AstrBot 本体版本与 WebUI 版本；读不到 WebUI 版本时只显示本体版本"
+    },
     "ignored_plugins": {
         "description": "插件黑名单",
         "type": "list",
@@ -22,7 +40,7 @@
             "astrbot",
             "builtin_commands"
         ],
-        "hint": "名单里的插件既不会出现在帮助图，也不会被 AI 挖掘。已默认排除本插件与 AstrBot 内置插件（astrbot、builtin_commands），避免扫到自己；想让某个内置插件出现，把它的插件名从名单里删掉即可",
+        "hint": "名单里的插件既不会出现在帮助图，也不会被 AI 挖掘。已默认排除本插件与 AstrBot 内置插件（astrbot、builtin_commands），避免扫到自己；想让某个内置插件出现，把它的插件名从名单里删掉即可。注意：开启「把 AstrBot 内置指令纳入帮助」时，builtin_commands 会被覆盖而照样展示",
         "items": {
             "type": "string"
         }

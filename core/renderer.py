@@ -53,6 +53,8 @@ def build_text(
     subtitle: str,
     show_group_header: bool = True,
     feature_mark: str = FEATURE_MARK,
+    version_text: str = "",
+    show_version: bool = True,
 ) -> str:
     """生成帮助图的纯文本降级内容。
 
@@ -64,11 +66,16 @@ def build_text(
         subtitle: 与帮助图一致的副标题。
         show_group_header: 是否打印分组标题行。
         feature_mark: 条目没单独设过标注时使用的默认标注。
+        version_text: 与帮助图一致的版本行文字，空串表示不打印。
+        show_version: 是否打印版本行，与帮助图的开关保持一致。
 
     Returns:
         可直接发送的纯文本帮助内容。
     """
     lines = [subtitle]
+    version_line = version_text.strip()
+    if show_version and version_line:
+        lines.append(version_line)
     for name, entries in _text_blocks(groups, show_group_header):
         lines.append("")
         if name:

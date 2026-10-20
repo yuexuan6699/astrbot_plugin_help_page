@@ -15,6 +15,9 @@
 - **多触发词写法**：一个条目的主指令与别名在帮助图里各自带斜杠、用 `、` 连接，例如 `/塔罗、/tarot、/塔罗牌`；「非指令」类型则整条去掉斜杠，写成 `塔罗、tarot、塔罗牌`。
 - **自定义条目**：可新增不属于任何插件的条目（分组、指令、注释、权限均可自定），也可随时编辑或彻底删除。「指令」框里直接写 `签到/打卡` 会自动拆成主指令 `签到` + 别名 `打卡`。
 - **插件黑名单**：名单内的插件既不参与帮助图扫描，也不参与 AI 挖掘，默认排除本插件与 AstrBot 内置插件。
+- **接管内置 `/help`**：AstrBot 自带的 `/help`（输出本体版本 + WebUI 版本 + 内置指令清单）会被直接禁用，`/help`、`/帮助`、`/菜单` 全部由本插件响应；禁用或卸载本插件时自动恢复原状。
+- **内置指令进帮助图**：AstrBot 自带指令统一归到「AstrBot 内置」分组，和普通插件指令一起排进帮助图；`/help` 自己除外（列进帮助会自相矛盾）。即使黑名单里还留着 `builtin_commands`，开启该功能后也照样展示。
+- **版本行**：标题下方显示 `AstrBot v本体版本 · WebUI v前端版本`；读不到 WebUI 版本（前端资源未下载）时只显示本体版本，可在「画布调整 → 标题区」里关掉或改字号、颜色。
 - **权限过滤**：普通用户看不到管理员专用指令，判定规则与 AstrBot 指令权限完全一致。
 
 ## 安装
@@ -30,6 +33,8 @@
 | `帮助` | 输出全部帮助图 |
 | `帮助 原神` | 只输出与「原神」相关的条目 |
 | `help` / `菜单` | `帮助` 的别名，可在配置中修改 |
+
+`/help` 原先由 AstrBot 内置指令响应（输出本体版本、WebUI 版本与内置指令清单），装上本插件后这条指令被接管：内置 `/help` 会被直接禁用，发 `/help` 得到的是本插件的帮助图，而它原本提供的信息被拆成两处——版本号做成帮助图的版本行，内置指令清单以「AstrBot 内置」分组进图。
 
 帮助图合成失败时（例如字体缺失）会自动降级为纯文本输出，不会丢消息。
 
@@ -72,7 +77,10 @@ http://localhost:6185/#/plugin-page/astrbot_plugin_help_page/help
 | --- | --- | --- | --- |
 | `commands` | list | `["帮助", "help", "菜单"]` | 指令触发词，第一项为主名，其余为别名，修改后需重载插件 |
 | `filter_by_permission` | bool | `true` | 按发送者权限过滤管理员专用指令 |
-| `ignored_plugins` | list | `["astrbot_plugin_help_page", "astrbot", "builtin_commands"]` | 插件黑名单，名单内的插件既不扫描也不挖掘；想让某个内置插件出现在帮助里，把它从名单中删掉 |
+| `block_builtin_help` | bool | `true` | 屏蔽 AstrBot 自带的 `/help`；开启后 `/help` 完全由本插件接管，内置 help 指令被直接禁用，禁用/卸载插件时自动恢复 |
+| `show_builtin_commands` | bool | `true` | 把 AstrBot 内置指令纳入帮助，统一归到「AstrBot 内置」分组；会覆盖 `ignored_plugins` 里的 `builtin_commands`，内置 `/help` 本身始终不列出 |
+| `show_version` | bool | `true` | 帮助图标题下方显示版本行（AstrBot 本体版本 + WebUI 版本），插件页「标题区」里还能改字号与颜色 |
+| `ignored_plugins` | list | `["astrbot_plugin_help_page", "astrbot", "builtin_commands"]` | 插件黑名单，名单内的插件既不扫描也不挖掘；想让某个内置插件出现在帮助里，把它从名单中删掉。注意 `show_builtin_commands` 开启时 `builtin_commands` 会被覆盖 |
 | `font_path` | string | 空 | 帮助图字体文件路径，留空用插件内置的荆南圆体，再回退系统字体 |
 | `image_title` | string | `功能帮助` | 帮助图默认标题，插件页未单独设置时使用 |
 | `image_footer` | string | 空 | 帮助图默认页脚，留空不显示 |

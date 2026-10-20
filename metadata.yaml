@@ -1,7 +1,7 @@
 name: astrbot_plugin_help_page
 display_name: 更好的帮助
-desc: 自动扫描已装插件的指令，本地合成帮助图；WebUI 插件页支持可视化排版、拖拽排序、AI 翻译润色与未注册功能挖掘
+desc: 自动扫描已装插件的指令，本地合成帮助图；WebUI 插件页支持可视化排版、拖拽排序、AI 翻译润色与未注册功能挖掘。接管 AstrBot 自带 /help，并把本体版本、WebUI 版本与内置指令清单纳入帮助
 short_desc: 自动扫描插件指令的帮助页，可拖拽排版、AI 翻译润色、实时预览并输出帮助图
-version: 1.0.0
+version: 1.1.0
 author: 苏月晅
 repo: https://github.com/yuexuan6699/astrbot_plugin_help_page

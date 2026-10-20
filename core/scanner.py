@@ -5,6 +5,19 @@ from typing import Any
 from astrbot.api.event import AstrMessageEvent
 from astrbot.core.star.command_management import list_commands
 
+BUILTIN_PLUGINS = frozenset({"builtin_commands"})
+"""AstrBot 自带指令所在的插件名（`astrbot/builtin_stars/builtin_commands`）。"""
+
+BUILTIN_GROUP = "AstrBot 内置"
+"""内置指令在帮助图里统一使用的分组名，避免直接显示 `builtin_commands`。"""
+
+BUILTIN_HIDDEN_COMMANDS = frozenset({"help"})
+"""内置指令里不纳入帮助的条目。
+
+`/help` 本身就是这个帮助指令，列进帮助图会自相矛盾，因此始终排除；
+AstrBot 自带 `/help` 的输出也把 help 排除在外，这里保持一致。
+"""
+
 
 def _flatten(items: list[dict[str, Any]], out: list[dict[str, Any]]) -> None:
     """把指令组与子指令展开成平铺列表。"""
@@ -13,11 +26,17 @@ def _flatten(items: list[dict[str, Any]], out: list[dict[str, Any]]) -> None:
         _flatten(item.get("sub_commands") or [], out)
 
 
-async def scan_entries(ignored_plugins: set[str] | None = None) -> list[dict[str, Any]]:
+async def scan_entries(
+    ignored_plugins: set[str] | None = None,
+    include_builtin: bool = False,
+) -> list[dict[str, Any]]:
     """扫描当前已注册且启用的全部插件指令。
 
     Args:
         ignored_plugins: 插件黑名单，名单内的插件整块跳过。
+        include_builtin: 是否把 AstrBot 自带指令一并纳入。为 True 时
+            `builtin_commands` 会覆盖黑名单（现网配置里默认就带着它，
+            否则内置指令永远进不了帮助），并统一归入「AstrBot 内置」分组。
 
     Returns:
         平铺后的指令条目列表，每项包含 key、group、command、aliases 等字段。
@@ -34,21 +53,39 @@ async def scan_entries(ignored_plugins: set[str] | None = None) -> list[dict[str
             continue
         if not item.get("enabled") or not item.get("plugin_activated"):
             continue
-        if (item.get("plugin") or "") in ignored:
+
+        plugin = item.get("plugin") or ""
+        is_builtin = plugin in BUILTIN_PLUGINS
+        if is_builtin:
+            if not include_builtin:
+                continue
+        elif plugin in ignored:
             continue
+
+        command = item.get("effective_command") or ""
+        if is_builtin and command.strip().lower() in BUILTIN_HIDDEN_COMMANDS:
+            continue
+
         entries.append(
             {
                 "key": item.get("handler_full_name") or "",
-                "plugin": item.get("plugin") or "",
-                "group": item.get("plugin_display_name")
-                or item.get("plugin")
-                or "其他",
-                "command": item.get("effective_command") or "",
+                "plugin": plugin,
+                "group": (
+                    BUILTIN_GROUP
+                    if is_builtin
+                    else (
+                        item.get("plugin_display_name")
+                        or item.get("plugin")
+                        or "其他"
+                    )
+                ),
+                "command": command,
                 "aliases": item.get("aliases") or [],
                 "description": item.get("description") or "",
                 "permission": item.get("permission") or "everyone",
                 "is_group": bool(item.get("is_group")),
                 "reserved": bool(item.get("reserved")),
+                "builtin": is_builtin,
                 "kind": "command",
             }
         )

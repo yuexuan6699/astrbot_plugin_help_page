@@ -85,9 +85,10 @@ _INT_BOUNDS: dict[str, tuple[int, int]] = {
     "line_gap": (0, 30),
     "footer_size": (9, 32),
     "footer_gap_top": (0, 80),
+    "version_size": (9, 36),
 }
 
-_BOOL_FIELDS = ("show_group_header",)
+_BOOL_FIELDS = ("show_group_header", "show_version")
 
 _COLOR_FIELDS = (
     "bg_top",
@@ -103,6 +104,7 @@ _COLOR_FIELDS = (
     "cmd_accent",
     "desc_color",
     "footer_color",
+    "version_color",
 )
 
 _TEXT_LIMITS = {
@@ -125,6 +127,9 @@ _FIELD_LABELS: dict[str, str] = {
     "subtitle": "副标题",
     "subtitle_size": "副标题字号",
     "subtitle_color": "副标题颜色",
+    "show_version": "显示版本行",
+    "version_size": "版本行字号",
+    "version_color": "版本行颜色",
     "show_group_header": "显示分组标题栏",
     "group_size": "分组字号",
     "group_color": "分组颜色",
@@ -170,6 +175,9 @@ _SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
             "subtitle",
             "subtitle_size",
             "subtitle_color",
+            "show_version",
+            "version_size",
+            "version_color",
         ),
     ),
     (
@@ -296,6 +304,14 @@ class Theme:
     subtitle: str = ""
     subtitle_size: int = 23
     subtitle_color: str = "#8291a5"
+
+    # 版本行：显示 AstrBot 本体版本与 WebUI 版本。
+    # version_text 由插件在运行时注入（外部配置无法写入，故不列入 _TEXT_LIMITS），
+    # 只有开关、字号、颜色开放给用户调整。
+    show_version: bool = True
+    version_size: int = 14
+    version_color: str = "#8291a5"
+    version_text: str = ""
 
     show_group_header: bool = True
     group_size: int = 18

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -11,6 +11,8 @@ from astrbot.api import AstrBotConfig
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star
 from astrbot.api.web import error_response, json_response, request
+from astrbot.core.config.default import VERSION
+from astrbot.core.dashboard_assets import get_dashboard_version
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
@@ -21,7 +23,7 @@ from .core.ai import (
     polish_entries,
     resolve_provider_id,
 )
-from .core.help_image import describe_font_source, theme_schema
+from .core.help_image import Theme, describe_font_source, theme_schema
 from .core.miner import collect_candidates
 from .core.renderer import (
     build_groups,
@@ -38,6 +40,12 @@ PLUGIN_NAME = "astrbot_plugin_help_page"
 CACHE_KEEP = 20
 """帮助图缓存目录保留的文件数量。"""
 
+BUILTIN_HELP_MODULE = "astrbot.builtin_stars.builtin_commands.main"
+"""AstrBot 自带 `/help` 所在的模块路径（内置插件 builtin_commands）。"""
+
+BUILTIN_HELP_HANDLER = f"{BUILTIN_HELP_MODULE}_help"
+"""AstrBot 自带 `/help` 的 handler 全名。"""
+
 
 class HelpPagePlugin(Star):
     """自动扫描插件指令生成帮助页，支持 WebUI 页面编辑与聊天图片输出。"""
@@ -47,6 +55,9 @@ class HelpPagePlugin(Star):
         self.config = config or {}
         self.store = HelpStore()
         self._apply_command_names(self.config.get("commands") or [])
+        self._version_cache: str | None = None
+        self._builtin_help_original: bool | None = None
+        self._apply_builtin_help_block()
 
         self.context.register_web_api(
             f"/{PLUGIN_NAME}/state",
@@ -104,6 +115,90 @@ class HelpPagePlugin(Star):
                 filter_ref.alias = set(cleaned[1:])
                 filter_ref._cmpl_cmd_names = None
 
+    def _apply_builtin_help_block(self) -> None:
+        """屏蔽 AstrBot 自带的 `/help`。
+
+        本插件以 priority=1 抢先处理 `/help` 并 stop_event，正常情况已经轮不到
+        内置 `/help`；但用户改了 `commands` 配置、或别名没有包含 help 时，
+        内置 `/help` 就会露出来。这里直接把内置 handler 的 `enabled` 置为 False，
+        与「优先级抢占」形成双保险，并在 terminate() 时恢复原状。
+
+        只处理 `builtin_commands` 里名为 `help` 的那一条，不影响其他内置指令。
+        """
+        if not self.config.get("block_builtin_help", True):
+            return
+        for handler in star_handlers_registry:
+            if handler.handler_module_path != BUILTIN_HELP_MODULE:
+                continue
+            if handler.handler_name != "help":
+                continue
+            self._builtin_help_original = bool(handler.enabled)
+            handler.enabled = False
+            self.logger.info("已屏蔽 AstrBot 自带 /help，改由本插件接管")
+            return
+
+    def _restore_builtin_help(self) -> None:
+        """把 `terminate()` 之前屏蔽掉的内置 `/help` 恢复回原状态。"""
+        if self._builtin_help_original is None:
+            return
+        for handler in star_handlers_registry:
+            if handler.handler_full_name != BUILTIN_HELP_HANDLER:
+                continue
+            handler.enabled = self._builtin_help_original
+            break
+        self._builtin_help_original = None
+
+    async def initialize(self) -> None:
+        """插件全部加载完成后再确认一次内置 `/help` 已被屏蔽。
+
+        插件加载顺序并不保证 `builtin_commands` 一定在本插件之前完成注册，
+        所以 `__init__` 里没命中时，这里补一次，避免 /help 漏回内置指令。
+        """
+        if self._builtin_help_original is None:
+            self._apply_builtin_help_block()
+
+    async def terminate(self) -> None:
+        """插件卸载时恢复被屏蔽的内置 `/help`，避免插件移除后指令永久失效。"""
+        self._restore_builtin_help()
+
+    async def _version_text(self) -> str:
+        """生成帮助页的版本行文字：`AstrBot v本体版本 · WebUI v前端版本`。
+
+        WebUI 版本可能读不到（未下载前端资源时返回 None），读不到就只显示本体版本；
+        结果在插件生命周期内缓存，避免每次出图都去读一次磁盘。
+
+        Returns:
+            版本行文字；配置里关掉版本行时返回空串。
+        """
+        if not self.config.get("show_version", True):
+            return ""
+        if self._version_cache is not None:
+            return self._version_cache
+
+        text = f"AstrBot v{VERSION}"
+        try:
+            dashboard = await get_dashboard_version()
+        except Exception as e:  # noqa: BLE001 - 前端资源读取失败不应影响帮助输出
+            self.logger.warning(f"读取 WebUI 版本失败，版本行只显示本体版本: {e}")
+            dashboard = None
+        if dashboard:
+            text = f"{text} · WebUI v{dashboard}"
+        self._version_cache = text
+        return text
+
+    async def _with_version(self, theme: Theme) -> Theme:
+        """给主题注入版本行文字。
+
+        版本号是运行时信息，不写进配置文件，只在出图/预览前临时替换到 Theme 上。
+
+        Args:
+            theme: 已合并外观配置的主题。
+
+        Returns:
+            带版本行文字的主题副本。
+        """
+        return replace(theme, version_text=await self._version_text())
+
     # ------------------------------------------------------------------ 聊天指令
 
     @filter.command("帮助", alias={"help", "菜单"}, priority=1)
@@ -122,7 +217,9 @@ class HelpPagePlugin(Star):
 
         groups = build_groups(entries, self.store.state)
         subtitle = build_subtitle(query.strip(), len(entries))
-        theme = self.store.appearance(self._appearance_defaults())
+        theme = await self._with_version(
+            self.store.appearance(self._appearance_defaults())
+        )
         try:
             path = await render_help_png(
                 groups,
@@ -138,6 +235,8 @@ class HelpPagePlugin(Star):
                     subtitle,
                     theme.show_group_header,
                     theme.feature_mark,
+                    theme.version_text,
+                    theme.show_version,
                 )
             )
             return
@@ -151,7 +250,7 @@ class HelpPagePlugin(Star):
         ignored = self._ignored_plugins()
         return json_response(
             {
-                "scanned": await scan_entries(ignored),
+                "scanned": await scan_entries(ignored, self._include_builtin()),
                 "state": self.store.state,
                 "schema": theme_schema(),
                 "appearance": asdict(self.store.appearance(defaults)),
@@ -163,6 +262,12 @@ class HelpPagePlugin(Star):
                         self.config.get("filter_by_permission", True)
                     ),
                     "ai_provider": str(self.config.get("ai_provider") or ""),
+                    "show_builtin_commands": self._include_builtin(),
+                    "block_builtin_help": bool(
+                        self.config.get("block_builtin_help", True)
+                    ),
+                    "show_version": bool(self.config.get("show_version", True)),
+                    "version": await self._version_text(),
                 },
             }
         )
@@ -196,7 +301,11 @@ class HelpPagePlugin(Star):
         try:
             data = await render_help_png_bytes(
                 groups,
-                merge_appearance(self._appearance_defaults(), state.get("appearance")),
+                await self._with_version(
+                    merge_appearance(
+                        self._appearance_defaults(), state.get("appearance")
+                    )
+                ),
                 subtitle,
             )
         except Exception as e:  # noqa: BLE001 - 参数越界或字体缺失都可能抛错，统一回给页面
@@ -261,7 +370,10 @@ class HelpPagePlugin(Star):
             return error_response("请求体必须是 JSON 对象", status_code=400)
 
         ignored = self._ignored_plugins()
-        registered = {entry["key"] for entry in await scan_entries(ignored)}
+        registered = {
+            entry["key"]
+            for entry in await scan_entries(ignored, self._include_builtin())
+        }
         candidates, truncated = collect_candidates(registered, ignored)
         if not candidates:
             return json_response({"candidates": [], "scanned": 0, "truncated": False})
@@ -313,6 +425,14 @@ class HelpPagePlugin(Star):
         """插件配置中指定的文案处理模型 ID，空表示使用默认模型。"""
         return str(self.config.get("ai_provider") or "").strip()
 
+    def _include_builtin(self) -> bool:
+        """是否把 AstrBot 自带指令纳入帮助图。
+
+        为 True 时内置插件 `builtin_commands` 会覆盖 `ignored_plugins` 里的同名项，
+        否则现网配置里默认就带着它，内置指令永远进不了帮助。
+        """
+        return bool(self.config.get("show_builtin_commands", True))
+
     def _appearance_defaults(self) -> dict[str, Any]:
         """插件配置项提供的兜底外观，插件页未覆盖时生效。"""
         defaults: dict[str, Any] = {}
@@ -343,7 +463,7 @@ class HelpPagePlugin(Star):
             最终条目列表。
         """
         entries = merge_entries(
-            await scan_entries(self._ignored_plugins()),
+            await scan_entries(self._ignored_plugins(), self._include_builtin()),
             state,
         )
         if event is not None and self.config.get("filter_by_permission", True):
