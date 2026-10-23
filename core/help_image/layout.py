@@ -374,6 +374,7 @@ def compose(groups: list[Group], theme: Theme) -> Image.Image:
                     parse_color(theme.card_border),
                     1,
                     theme.card_shadow,
+                    parse_color(theme.card_shadow_color),
                 )
 
                 text_x = x0 + theme.card_pad_x

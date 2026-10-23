@@ -175,14 +175,17 @@ function toHexColor(value, fallback) {
     }
     return `#${body.slice(0, 6)}`.toLowerCase();
   }
-  const rgb = /^\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/.exec(text);
+  const rgb = /^(?:rgba?\s*\(\s*|\(\s*)(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/i.exec(
+    text,
+  );
   if (rgb) {
     const channels = [rgb[1], rgb[2], rgb[3]]
       .map((part) => Math.min(255, Number(part)).toString(16).padStart(2, "0"))
       .join("");
     return `#${channels}`;
   }
-  return String(fallback || "#000000").slice(0, 7);
+  const named = { white: "#ffffff", black: "#000000", transparent: "#000000" };
+  return String(named[text.toLowerCase()] || fallback || "#000000").slice(0, 7);
 }
 
 /* ------------------------------------------------------------------ 状态 */
@@ -202,6 +205,8 @@ const model = {
     mine_meta: {},
   },
   schema: [],
+  palettes: [],
+  defaultPalette: "sky",
   appearance: {},
   appearanceBase: {},
   font: "",
@@ -943,7 +948,7 @@ function buildColorControl(field, value) {
   const picker = el("input");
   picker.type = "color";
   picker.value = toHexColor(value, field.default);
-  const text = textInput(value, "#rrggbb 或 (r,g,b)", (next) => {
+  const text = textInput(value, "#rrggbb、rgb() 或 (r,g,b)", (next) => {
     picker.value = toHexColor(next, picker.value);
     setAppearance(field.name, next);
   });
@@ -955,16 +960,58 @@ function buildColorControl(field, value) {
   return wrap;
 }
 
+/** 当前选中的配色方案键。 */
+function paletteKey() {
+  const value = model.appearance.palette || model.state.appearance.palette;
+  return String(value || model.defaultPalette || "sky");
+}
+
+/** 当前选中的配色方案对象，找不到时返回 null。 */
+function activePalette() {
+  const key = paletteKey();
+  return (model.palettes || []).find((item) => item.key === key) || null;
+}
+
+/**
+ * 某字段的继承值：配色方案优先，其次插件配置兜底，最后是主题默认值。
+ * 用户显式改过的值不走这里。
+ */
+function inheritedAppearance(name) {
+  const palette = activePalette();
+  const colors = palette && palette.colors ? palette.colors[name] : undefined;
+  if (colors !== undefined) return colors;
+  if (model.appearanceBase[name] !== undefined) return model.appearanceBase[name];
+  const field = appearanceField(name);
+  return field ? field.default : "";
+}
+
 function setAppearance(name, value) {
+  const inherited = inheritedAppearance(name);
   model.appearance[name] = value;
-  const base = model.appearanceBase[name];
-  if (String(value) === String(base === undefined ? "" : base)) {
+  if (String(value) === String(inherited)) {
     delete model.state.appearance[name];
+    delete model.appearance[name];
   } else {
     model.state.appearance[name] = value;
   }
   markDirty();
   schedulePreview();
+}
+
+/** 切换整套配色：清掉逐个改过的颜色，只保留方案键，再交给后端解析。 */
+function setPalette(key) {
+  const palette = (model.palettes || []).find((item) => item.key === key);
+  if (!palette) return;
+  model.state.appearance.palette = key;
+  model.appearance.palette = key;
+  for (const name of Object.keys(palette.colors || {})) {
+    delete model.state.appearance[name];
+    delete model.appearance[name];
+  }
+  markDirty();
+  renderPanel();
+  schedulePreview();
+  toast(`已套用「${palette.name}」配色`);
 }
 
 function buildBoolControl(field, value) {
@@ -980,10 +1027,7 @@ function buildBoolControl(field, value) {
 }
 
 function buildField(field) {
-  const value =
-    model.appearance[field.name] === undefined
-      ? field.default
-      : model.appearance[field.name];
+  const value = appearanceValue(field.name);
   let control;
   if (field.kind === "int") control = buildIntControl(field, value);
   else if (field.kind === "bool") control = buildBoolControl(field, value);
@@ -1024,12 +1068,10 @@ function appearanceField(name) {
   return null;
 }
 
-/** 外观项当前生效值：用户改过的优先，其次插件配置兜底，最后是主题默认值。 */
+/** 外观项当前生效值：用户改过的优先，其次按配色方案与插件配置兜底。 */
 function appearanceValue(name) {
   if (model.appearance[name] !== undefined) return model.appearance[name];
-  if (model.appearanceBase[name] !== undefined) return model.appearanceBase[name];
-  const field = appearanceField(name);
-  return field ? field.default : "";
+  return inheritedAppearance(name);
 }
 
 /** 页签顶部的两项固定文字：名字、副标题，改完即时进预览。 */
@@ -1090,9 +1132,55 @@ function buildInfoSection() {
   return node;
 }
 
+/** 配色方案选择区：一张卡片一套方案，点一下整套换掉。 */
+function buildPaletteSection() {
+  const palettes = model.palettes || [];
+  if (!palettes.length) return null;
+
+  const node = el("details", "section palette-section");
+  node.open = true;
+  node.append(el("summary", null, "配色方案"));
+
+  const grid = el("div", "palette-grid");
+  const current = paletteKey();
+  for (const palette of palettes) {
+    const colors = palette.colors || {};
+    const card = button("", "palette-card", () => setPalette(palette.key));
+    card.classList.toggle("is-active", palette.key === current);
+    card.title = palette.hint || "";
+
+    const swatch = el("span", "palette-swatch");
+    swatch.style.background = `linear-gradient(160deg, ${colors.bg_top || "#ffffff"}, ${
+      colors.bg_bottom || "#ffffff"
+    })`;
+    for (const name of ["card_bg", "cmd_color", "desc_color", "cmd_accent"]) {
+      const dot = el("span", "palette-dot");
+      dot.style.background = colors[name] || "transparent";
+      swatch.append(dot);
+    }
+
+    card.append(swatch, el("span", "palette-name", palette.name));
+    grid.append(card);
+  }
+
+  const body = el("div", "section-body");
+  body.append(
+    grid,
+    el(
+      "div",
+      "field-hint",
+      "点选即整套替换下面的颜色；单独改过的颜色会被重置，方案本身不受影响",
+    ),
+  );
+  node.append(body);
+  return node;
+}
+
 function renderPanel() {
   const panel = $("panel");
   panel.replaceChildren();
+  const paletteSection = buildPaletteSection();
+  if (paletteSection) panel.append(paletteSection);
   for (const section of model.schema) panel.append(buildSection(section));
   panel.append(buildInfoSection());
 }
@@ -1455,13 +1543,81 @@ function openMineModal() {
     mode = mode === "dismissed" ? "candidates" : "dismissed";
     render();
   });
+  const dumpBtn = button("全部废弃", "btn tiny danger", () => dismissAll());
+  const clearPileBtn = button("清空废弃堆", "btn tiny danger", () => clearPile());
   const status = el("span", "mine-status");
   const bar = el("div", "mine-bar");
-  bar.append(action, pileBtn, status);
+  bar.append(action, pileBtn, dumpBtn, clearPileBtn, status);
 
   const listWrap = el("div", "mine-list");
   const body = el("div");
   body.append(bar, listWrap);
+
+  /** 把一条候选直接丢进废弃堆：不用先勾选，也不会顺手把别的条目加进帮助。 */
+  function dismissCandidate(id) {
+    const index = model.state.mining.findIndex((item) => item.id === id);
+    if (index < 0) return;
+    const [record] = model.state.mining.splice(index, 1);
+    if (!model.state.dismissed.some((item) => item.id === record.id)) {
+      model.state.dismissed.push({ ...record, at: new Date().toISOString() });
+    }
+    markDirty();
+    persistState();
+    render();
+    toast(`「${record.command}」已进废弃堆，下次挖掘不再出现`);
+  }
+
+  /** 一次把当前候选全部废弃，适合「这一批全是噪声」的情况。 */
+  function dismissAll() {
+    if (!model.state.mining.length) return;
+    const count = model.state.mining.length;
+    const now = new Date().toISOString();
+    for (const record of model.state.mining) {
+      if (!model.state.dismissed.some((item) => item.id === record.id)) {
+        model.state.dismissed.push({ ...record, at: now });
+      }
+    }
+    model.state.mining = [];
+    markDirty();
+    persistState();
+    render();
+    toast(`${count} 条候选已全部进废弃堆`);
+  }
+
+  /** 清空废弃堆：这些候选会在下次挖掘时重新出现，方便重新判断。 */
+  function clearPile() {
+    const count = model.state.dismissed.length;
+    if (!count) return;
+    model.state.dismissed = [];
+    markDirty();
+    persistState();
+    render();
+    toast(`已清空废弃堆（${count} 条），下次挖掘会重新出现`);
+  }
+
+  /** 把勾选的单条直接加入自定义条目，不必等整批处理。 */
+  function addSingle(row) {
+    const parsed = parseCommandInput(row.commandInput.value);
+    if (!parsed.command) {
+      toast("请先填写触发词再点「加入」");
+      return;
+    }
+    model.state.custom.push(
+      buildCustomFromCandidate(
+        row.candidate,
+        parsed,
+        row.groupInput.value,
+        row.descArea.value,
+      ),
+    );
+    model.state.mining = model.state.mining.filter(
+      (item) => item.id !== row.candidate.id,
+    );
+    markDirty();
+    persistState();
+    render();
+    toast(`已加入「${parsed.command}」`);
+  }
 
   /** 候选列表：勾选的加入自定义条目，未勾选的进废弃堆。 */
   function renderCandidates() {
@@ -1537,9 +1693,16 @@ function openMineModal() {
         fieldNode("分组", groupInput),
         fieldNode("注释", descArea),
       );
+      const row = { candidate, pick, commandInput, groupInput, descArea };
+      const tools = el("div", "candidate-tools");
+      tools.append(
+        button("加入", "btn tiny accent", () => addSingle(row)),
+        button("废弃", "btn tiny ghost danger", () => dismissCandidate(candidate.id)),
+      );
+      main.append(tools);
       node.append(pick, main);
       listWrap.append(node);
-      rows.push({ candidate, pick, commandInput, groupInput, descArea });
+      rows.push(row);
     }
   }
 
@@ -1588,6 +1751,7 @@ function openMineModal() {
             (value) => value.id !== item.id,
           );
           markDirty();
+          persistState();
           render();
           toast("已移出废弃堆，下次挖掘会重新出现");
         }),
@@ -1611,6 +1775,9 @@ function openMineModal() {
     pileBtn.classList.toggle("is-active", mode === "dismissed");
     status.textContent = mineStatusText();
 
+    dumpBtn.hidden = mode === "dismissed" || !mining.length;
+    clearPileBtn.hidden =
+      mode !== "dismissed" || !model.state.dismissed.length;
     $("modal-ok").textContent = "加入所选条目";
     $("modal-ok").hidden = mode === "dismissed" || !mining.length;
     $("modal-note").textContent = mineNote();
@@ -1639,9 +1806,22 @@ function mineStatusText() {
 
 function mineNote() {
   if (model.state.mining.length) {
-    return "勾选的会加入为自定义条目（请自行验证触发词）；未勾选的进废弃堆，下次挖掘不再出现";
+    return "每条右侧可直接「加入」或「废弃」；勾选的条目不想要，可用「全部废弃」一次清掉，勾选的「加入所选条目」会一并处理未勾选项";
   }
-  return "挖掘结果会记在本页，关掉窗口也不会丢；未勾选的候选会进废弃堆";
+  return "挖掘结果会记在本页，关掉窗口也不会丢；废弃记录会保留，下次挖掘不再重复出现";
+}
+
+/** 由一条候选生成自定义条目，单条「加入」和整批确认共用。 */
+function buildCustomFromCandidate(candidate, parsed, group, description) {
+  return {
+    id: `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    group: String(group || "").trim() || candidate.plugin || "自定义",
+    command: parsed.command,
+    aliases: parsed.aliases,
+    description,
+    permission: "everyone",
+    kind: candidate.kind === "feature" ? "feature" : "command",
+  };
 }
 
 /** 确认挖掘结果：勾选的加入自定义条目，未勾选的进废弃堆。 */
@@ -1655,15 +1835,14 @@ function confirmMine(rows) {
     if (row.pick.checked) {
       const parsed = parseCommandInput(row.commandInput.value);
       if (!parsed.command) continue;
-      model.state.custom.push({
-        id: `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-        group: row.groupInput.value.trim() || row.candidate.plugin || "自定义",
-        command: parsed.command,
-        aliases: parsed.aliases,
-        description: row.descArea.value,
-        permission: "everyone",
-        kind: row.candidate.kind === "feature" ? "feature" : "command",
-      });
+      model.state.custom.push(
+        buildCustomFromCandidate(
+          row.candidate,
+          parsed,
+          row.groupInput.value,
+          row.descArea.value,
+        ),
+      );
       added.add(row.candidate.id);
       count += 1;
     } else {
@@ -1702,6 +1881,7 @@ function restoreDismissed(id) {
     model.state.mining.push(record);
   }
   markDirty();
+  persistState();
 }
 
 async function runMineSearch(render) {
@@ -1720,11 +1900,13 @@ async function runMineSearch(render) {
     await persistState();
     toast(
       candidates.length
-        ? `扫到 ${candidates.length} 条候选，请逐条确认`
-        : "没有发现可直接触发的未注册功能",
+        ? `扫到 ${candidates.length} 条候选，可逐条「加入」或「废弃」`
+        : result.message || "没有发现可直接触发的未注册功能",
+      3600,
     );
   } catch (error) {
-    toast(`AI 挖掘失败：${error.message}`);
+    // 失败时保留上一次的挖掘结果，避免一次模型抽风把已挖到的条目清空
+    toast(`AI 挖掘失败：${error.message}`, 4200);
   } finally {
     setBusy(false);
     render();
@@ -1937,6 +2119,9 @@ async function init() {
 
   model.scanned = data.scanned || [];
   model.schema = (data.schema && data.schema.sections) || [];
+  model.palettes = (data.schema && data.schema.palettes) || [];
+  model.defaultPalette =
+    (data.schema && data.schema.default_palette) || model.defaultPalette;
   model.appearance = { ...(data.appearance || {}) };
   model.appearanceBase = buildAppearanceBase(data.appearance_base || {});
   model.font = data.font || "";

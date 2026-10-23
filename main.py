@@ -376,7 +376,15 @@ class HelpPagePlugin(Star):
         }
         candidates, truncated = collect_candidates(registered, ignored)
         if not candidates:
-            return json_response({"candidates": [], "scanned": 0, "truncated": False})
+            return json_response(
+                {
+                    "candidates": [],
+                    "scanned": 0,
+                    "truncated": False,
+                    "reason": "no_candidates",
+                    "message": "没有扫到未注册的消息处理函数，已装插件里可能确实没有这类功能",
+                }
+            )
 
         # 已否决过的候选不再重复推给用户，避免每次挖掘都被同一批噪声淹没
         dismissed = {
@@ -386,7 +394,15 @@ class HelpPagePlugin(Star):
         }
         candidates = [item for item in candidates if item["id"] not in dismissed]
         if not candidates:
-            return json_response({"candidates": [], "scanned": 0, "truncated": truncated})
+            return json_response(
+                {
+                    "candidates": [],
+                    "scanned": 0,
+                    "truncated": truncated,
+                    "reason": "all_dismissed",
+                    "message": "本次扫到的候选都在废弃堆里；想重新确认请到废弃堆逐条恢复",
+                }
+            )
 
         try:
             provider_id = await resolve_provider_id(self.context, self._ai_provider())
@@ -397,12 +413,22 @@ class HelpPagePlugin(Star):
             self.logger.error(f"AI 挖掘失败: {e}")
             return error_response(f"AI 挖掘失败：{e}", status_code=502)
 
+        # 结果为空说明模型完全没给出可用内容。这里必须报错而不是回空列表，
+        # 否则页面会把上一次辛苦挖到的结果覆盖成空。
+        if not results:
+            return error_response(
+                "AI 没有返回可用的挖掘结果，请检查模型是否可用后重试；上次的结果已保留",
+                status_code=502,
+            )
+
         return json_response(
             {
                 "candidates": results,
                 "scanned": len(candidates),
                 "truncated": truncated,
                 "model": provider_id,
+                "reason": "",
+                "message": "",
             }
         )
 

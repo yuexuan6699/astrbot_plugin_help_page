@@ -482,6 +482,62 @@ body {
   min-width: 0;
 }
 
+/* 配色方案选择：一张卡片一套方案 */
+.palette-section .section-body {
+  display: block;
+}
+
+.palette-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+}
+
+.palette-card {
+  display: block;
+  padding: 6px;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.palette-card:hover {
+  border-color: var(--accent);
+}
+
+.palette-card.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.palette-swatch {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  border: 1px solid rgb(0 0 0 / 6%);
+  border-radius: 6px;
+}
+
+.palette-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 55%);
+}
+
+.palette-name {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  text-align: center;
+}
+
 .field-bool {
   display: flex;
   gap: 6px;
@@ -658,6 +714,12 @@ textarea {
 
 .candidate-main .field {
   margin-bottom: 6px;
+}
+
+.candidate-tools {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 .mine-bar {
