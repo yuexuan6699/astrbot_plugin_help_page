@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import re
 import time
 from dataclasses import asdict, replace
 from pathlib import Path
@@ -45,6 +46,27 @@ BUILTIN_HELP_MODULE = "astrbot.builtin_stars.builtin_commands.main"
 
 BUILTIN_HELP_HANDLER = f"{BUILTIN_HELP_MODULE}_help"
 """AstrBot 自带 `/help` 的 handler 全名。"""
+
+_LEADING_VERSION_MARK = re.compile(r"^[vV]\s*")
+"""版本号前面可能自带的 `v`。
+
+AstrBot 本体 VERSION 是 `4.29.1` 这种纯数字，而 `get_dashboard_version()`
+读到的前端版本形如 `v4.29.1`。两处都把前缀去掉，拼装时统一只加一个 `v`，
+否则会出现 `WebUI vv4.29.1`。
+"""
+
+
+def version_label(raw: Any) -> str:
+    """把版本号规整成不带前缀的纯版本号。
+
+    Args:
+        raw: 原始版本号，可能是字符串、数字或 None。
+
+    Returns:
+        去掉首尾空白与开头 `v` 的版本号；原值为空时返回空串。
+    """
+    text = str(raw or "").strip()
+    return _LEADING_VERSION_MARK.sub("", text).strip()
 
 
 class HelpPagePlugin(Star):
@@ -175,14 +197,16 @@ class HelpPagePlugin(Star):
         if self._version_cache is not None:
             return self._version_cache
 
-        text = f"AstrBot v{VERSION}"
+        core = version_label(VERSION)
+        text = f"AstrBot v{core}" if core else "AstrBot"
         try:
             dashboard = await get_dashboard_version()
         except Exception as e:  # noqa: BLE001 - 前端资源读取失败不应影响帮助输出
             self.logger.warning(f"读取 WebUI 版本失败，版本行只显示本体版本: {e}")
             dashboard = None
-        if dashboard:
-            text = f"{text} · WebUI v{dashboard}"
+        webui = version_label(dashboard)
+        if webui:
+            text = f"{text} · WebUI v{webui}"
         self._version_cache = text
         return text
 
